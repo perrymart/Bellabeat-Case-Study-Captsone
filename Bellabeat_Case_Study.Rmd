@@ -1,0 +1,301 @@
+---
+title: "Bellabeat Case Study"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+
+<center>
+![](https://bellabeat.com/wp-content/uploads/2020/12/bb-logo-full.png "Bellabeat"){width=50%}
+</center>
+
+## Table of Contents
+
+* 1. Ask Phase
+* 2. Prepare Phase
+* 3. Process Phase
+* 4. Analyze Phase
+* 5. Share Phase
+* 6. Act Phase
+
+## About the Company
+
+Bellabeat is a high-tech company manufacturing wellness driven smart products for women. Founded by Urška Sršen and Sando Mur, this rapidly growing company seeks to become a larger player in the market by gaining insights into how people are currently using their smart devices. The focus of this analysis is to use these insights to provide new growth opportunities for Bellabeat.
+
+## 1. Ask Phase
+
+* 1. What are some trends in smart device usage?
+* 2. How could these trends apply to Bellabeat customers?
+* 3. How could these trends help influence Bellabeat marketing strategy?
+
+#### Business Task
+
+To provide growth opportunites and marketing suggestions for Bellabeat using insights from current smart device usage.
+
+#### Data Sources
+
+The dataset used was FitBit Fitness Tracker Data in Kaggle. This dataset was made public by MÖBIUS and updated annually.
+
+## 2. Prepare Phase
+
+```{r include=FALSE}
+install.packages('tidyverse')
+install.packages('here')
+install.packages('skimr')
+install.packages('janitor')
+install.packages('dplyr')
+install.packages('lubridate')
+```
+#### Importing Libraries
+
+```{r echo = T, results = 'hide'}
+library(tidyverse)
+library(here)
+library(skimr)
+library(janitor)
+library(dplyr)
+library(lubridate)
+library(readr)
+library(scales)
+```
+
+#### Importing Data sets
+
+
+```{r echo = T, results = 'hide'}
+daily_activity <- read_csv("dailyActivity_merged.csv")
+daily_sleep <- read_csv("sleepDay_merged.csv")
+hourly_steps <- read_csv("hourlySteps_merged.csv")
+```
+
+Using the daily_activity, daily_sleep, and hourly_steps data sets, we can get accurate insights into the daily behaviors and activity level of smart device users. Then, those insights can be used to provide Bellabeat with opportunities to provide growth in their industry.
+
+
+
+
+## 3. Process Phase
+
+After taking a glance through the .csv files, the column denoting time was in different formats on all data sets. The chunk below was used to separate time and date into different columns and to extract a common format amoungst all data sets.
+```{r echo = T, results = 'hide'}
+# daily_activity
+daily_activity$ActivityDate <- as.POSIXct(daily_activity$ActivityDate, format="%m/%d/%Y", tz=Sys.timezone())
+daily_activity$Date <- format(daily_activity$ActivityDate, format = "%m/%d/%y")
+# daily_sleep
+daily_sleep$SleepDay <- as.POSIXct(daily_sleep$SleepDay, format="%m/%d/%Y", tz=Sys.timezone())
+daily_sleep$Date <- format(daily_sleep$SleepDay, format = "%m/%d/%y")
+# hourly_steps
+hourly_steps$ActivityHour <- as.POSIXct(hourly_steps$ActivityHour, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+hourly_steps$Time <- format(hourly_steps$ActivityHour, format = "%H:%M:%S")
+hourly_steps$Date <- format(hourly_steps$ActivityHour, format = "%m/%d/%y")
+
+```
+The daily activity and sleep data sets were merged together to allow analysis of not only user's activity levels, but how they sleep as well. The summary() function allowed a high level overview of the type of information in the daily and hourly data sets.
+```{r}
+daily <- merge(daily_sleep, daily_activity, by = c('Id','Date'))
+summary(daily)
+summary(hourly_steps)
+```
+Continuing exploring the data, the amount of users per data set is a relevent piece of information when understanding how many users there are in this analysis.
+```{r echo = T, results = 'show'}
+n_distinct(daily_activity$Id)
+n_distinct(daily_sleep$Id)
+n_distinct(hourly_steps$Id)
+```
+The n_distinct() function shows how many distinct items lie in the data frames selected column. The same amount of users used their smart devices in the hourly_steps and daily_activity data sets, however, there is a small decrease in users when looking at daily_sleep distinct users. 
+
+After summarizing, cleaning our formatting, and viewing unique users per data set, we move on to the analyze phase to take a deep dive into what insights we can pull out of the Process Phase.
+
+## 4. Analyze Phase / 5. Share Phase
+
+#### Types of Smart Device Users
+
+After reviewing the summaries in the Process Phase a clearer picture of what data is important to our business task begins to emerge. First, lets look at the breakdown of types of Users based off of there activities levels on a daily basis.
+
+A sedentary lifestyle is considered 5000 daily steps or lower, a lightly active lifestyle is considered to be between 5000-7500 steps, fairly active is below 10,000 steps daily, and very active is over 10,000 steps a day. This classification information can be found [here](https://www.10000steps.org.au/articles/counting-steps/#:~:text=The%20following%20pedometer%20indices%20have,to%209%2C999%20steps%20per%20day).
+
+We will use the users average steps per day per month to classify them in each of these categories.
+
+
+The assumption was taken that if the user took zero steps that day the fitness tracker was not used and that data will not be included in our classification.
+```{r}
+daily_average <- daily_activity %>% 
+  group_by(Id) %>%
+  summarise(average_daily_steps = mean(TotalSteps), 
+  average_daily_calories = mean(Calories))
+user <- daily_average %>% 
+  mutate(user = case_when(
+    average_daily_steps < 5000 & average_daily_steps > 0 ~ 'Sedentary',
+    average_daily_steps >= 5000 & average_daily_steps < 7500 ~ 'Lightly Active',
+    average_daily_steps >= 7500 & average_daily_steps < 10000 ~ 'Fairly Active',
+    average_daily_steps >= 10000 ~ 'Very Active'
+  ))
+head(user)
+```
+Now that users have been grouped we will analyze what percentage of the 33 users are sedentary, lightly active, fairly active, and very active.
+```{r }
+user_percent <- user %>%
+  group_by(user) %>%
+  summarise(total = n()) %>%
+  mutate(total_sum = sum(total)) %>%
+  group_by(user) %>%
+  summarise(total_decimal = total / total_sum) %>%
+  mutate(total_percent = scales::percent(total_decimal))
+user_percent$user <- factor(user_percent$user, 
+  levels = c("Very Active", "Fairly Active", "Lightly Active", "Sedentary"))
+
+user_percent %>% 
+  ggplot() + 
+    geom_col(aes(x = user, y = total_decimal, fill = user ) ,color = "black") +
+    geom_text(aes(label = total_percent, user, total_decimal), nudge_y = -.1)+
+    theme(legend.position="none")+
+    scale_y_continuous(labels = scales::percent_format(), limits=c(0,.3))+
+    scale_fill_brewer(palette = "Set2")+
+    labs(x = "User Types", y = "Percent (%)",
+    title ="Percentage of User Types")+
+    theme(plot.title = element_text(hjust = 0.5))
+```
+##### Analysis
+
+* Majority of smart device users are lightly or fairly active (both 27.3%), however, the distribution of user types is fairly even.
+
+* This is a good sign of quality data due to a fair distribution of lifestyles and not biasing one user type or another.
+
+#### Use of Device by User Type
+
+Now that the types of users has been distinguished, the next step would be to understand how much these users actually wear their device during the day. To catagorize daily use we need to set thresholds that can be used in a case_when() function.
+```{r}
+# Classification of Usage:
+#   - 0 days = No Use
+#   - Less than 10 days = Light Use
+#   - Between 10 and 19 days = Fair Use
+#   - Greater than 20 days = High Use
+days_used <- daily_activity %>%
+  group_by(Id) %>% 
+  summarise(days = sum(n())) %>% 
+  mutate(used = case_when(
+    days == 0 ~ 'No Use',
+    days < 10 ~ 'Light Use',
+    days >= 10 & days < 20 ~ 'Fair Use',
+    days >= 20 ~ 'High Use'
+  ))
+head(days_used)
+```
+In the tibble above, the user Id's have been categorized by their usage and now can be formatted to get the percent of how much the smart device is used in ggplot(). 
+```{r}
+# create table
+use_percent <- days_used %>%
+  group_by(used) %>%
+  summarise(total = n()) %>%
+  mutate(total_sum = sum(total)) %>%
+  group_by(used) %>%
+  summarise(total_decimal = total / total_sum) %>%
+  mutate(total_percent = scales::percent(total_decimal))
+use_percent$used <- factor(use_percent$used, 
+  levels = c("High Use", "Fair Use", "Light Use", "No Use"))
+# create plot
+use_percent %>% 
+  ggplot() + 
+    geom_col(aes(x = used, y = total_decimal, fill = used ) , color = "black")+
+    geom_text(aes(label = total_percent, used, total_decimal), nudge_y = .05)+
+    scale_y_continuous(labels = scales::percent_format(), limits=c(0,1))+
+    scale_fill_brewer(palette = "Dark2")+
+    labs(x = "Use Types", y = "Percent (%)",
+    title ="Percentage of Use Types")+
+    theme(plot.title = element_text(hjust = 0.5))
+```
+##### Analysis
+
+* The overwhelming majority of use type is high use (> 20 days).
+
+* The plot shows that all users in the data set use their smart device as well, there are no 'No Use' users in the data.
+
+The app could make recommendations to the users smart phone and remind them to charge their smart device, or that their smart device is fully charged. This kind of statement could possibly encourage and remind the remaining 9.1% of users to wear their smart device more often, rather than leaving it off.
+
+#### Steps per hour
+
+To further analyze user's daily activities, the hourly step totals on a daily bases were calculated and averaged.
+```{r}
+hourly_steps %>%  
+  group_by(Time) %>% 
+  summarize(mean_steps = mean(StepTotal)) %>%
+  ggplot() + 
+  geom_col(aes(x = Time, y = mean_steps, fill = mean_steps),color = "black" ) +
+  scale_fill_gradient(low = "blue", high = "orange")+
+  theme(axis.text.x = element_text(angle = 45))+
+  labs(x = "Hours", y = "Average Steps", title ="Hourly Step Totals", 
+  fill = "Step Amount")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+##### Analysis
+* The plot shows that users are <b>most</b> active between <b>7 a.m.</b> and <b>6 p.m.</b>
+* The plot shows that users are <b>least</b> active between <b>11 p.m.</b> and <b>5 a.m.</b>
+
+This data can be used to suggest to users when to wake up and when to wind down for the night, which in turn can encourage more users to wear their device while sleeping.
+
+#### Sleep Breakdown of User Types
+The available data allows the breakdown of how different kinds of users sleep. The quality of sleep has been determined by how approximate it is to an ideal, 8 hours:
+```{r}
+# Sleep Quality:
+#   - Less than 7 hours = Under Slept
+#   - Between 7 and 9 hours = Ideal Sleep
+#   - Over 9 hours = Oversleep
+sleep_by_type <- daily %>% 
+  group_by(Id) %>% 
+  summarise(mean_sleep = mean(TotalMinutesAsleep)) %>% 
+  mutate(sleep_type = case_when(
+    mean_sleep < 420 ~ 'Under Slept',
+    mean_sleep >= 420 & mean_sleep < 541 ~ 'Ideal Sleep',
+    mean_sleep >= 541 ~ 'Over Slept'
+  ))
+sleep_by_user_type <- merge(sleep_by_type, user, by = 'Id')
+head(sleep_by_user_type)
+```
+After assigning sleep types to Id's the percent of sleep type can be plotted for each user type.
+```{r}
+ggplot(sleep_by_user_type)+
+  geom_bar(aes(x = user, y = mean_sleep/sum(mean_sleep), fill = sleep_type), 
+  position="dodge", stat="summary",color = "black", fun = mean)+
+  scale_y_continuous(labels = scales::percent_format(), limits=c(0,.1))+
+  scale_fill_brewer(palette = "Accent")+
+  labs(x = "User Types", y = "Percentage of Sleep Type",
+  title ="Sleep Percentage by User Type", fill = "Sleep Type")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+##### Analysis
+* Fairly active users have a majority of ideal sleep with slight under sleeping
+* Lightly active users have more ideal sleep than under sleep
+* Most users who over sleep are sedentary
+* All very active users under sleep
+
+This breakdown give incredible insight into how sleep plays a role in user time. The device can recommend times users should go to bed and wake up to allow them to get more ideal sleep based on their current sleep wake schedule and step activity.
+
+
+## 6. Act Phase / Conclusions
+
+In this analysis their were clear insights found that can be applied to Bellabeats product to allow them to grow in this industry.
+
+* The overwhelming majority of users wear their smart device everyday and the user types are diverse. Base recommendations for exercise or movement based off of personalized data from each user.
+* Most sedentary users over sleep. The device can recommend bed/wake up times based on the hourly step per day data displayed. May allow users to shift to a more fairly active lifestyle and increase overall health.
+
+With the insights above and Bellabeat's community surrounding women's health a community reward system could be in place in the Bellabeat application. This system could reward users on a weekly or monthly bases for good sleep and activity habits. It may also allow the community to grow and users to connect with on anther for advice and a competitive spirit for the more active users. Gentle reminders to the user can be sent to participate or connect with others with simalar goals. The goals per user could be different per personal data to shift them into a more active or healthier lifestyle. Applying these steps to the Bellabeat application, could allow massive growth of Bellabeat community and become a major player in the current market.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
